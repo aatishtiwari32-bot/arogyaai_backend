@@ -1,0 +1,1 @@
+part_db = ["hand", "hath", "legs", "per", "toes", "elbow", "foot", "tummy", "chest", "thai", "neck", "face", "scalp", "fingers", ]
