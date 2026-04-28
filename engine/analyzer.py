@@ -1,5 +1,5 @@
-from nltk.stem import PorterStemmer
 
+from nltk.stem import PorterStemmer
 ps = PorterStemmer()
 
 def analyze(tokens: list, db: dict):
