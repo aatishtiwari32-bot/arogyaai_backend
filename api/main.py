@@ -10,32 +10,21 @@ import uuid
 app = FastAPI()
 
 SESSION_STORE: Dict[str, Dict[str, Any]] = {}
-
-
 class ChatRequest(BaseModel):
     session_id: Optional[str] = None
     message: str
-
-
 class ChatResponse(BaseModel):
     session_id: str
     stage: str
     confidence_score: float
     questions: Optional[list] = None
     final_output: Optional[dict] = None
-
-
 @app.post("/chat", response_model=ChatResponse)
 def chat(req: ChatRequest):
-
     try:
-        # 🔥 VALIDATION
         if not req.message or len(req.message) > 500:
             raise HTTPException(status_code=400, detail="Invalid message")
-
-        # 🔥 SESSION CREATE
         session_id = req.session_id or str(uuid.uuid4())
-
         state = SESSION_STORE.get(session_id, {
             "history": [],
             "scores": {},
@@ -43,13 +32,9 @@ def chat(req: ChatRequest):
             "ask_count": 0,
             "current_focus": None
         })
-
         state["history"].append(req.message)
-
         result, updated_state = pipeline(req.message, state)
-
         SESSION_STORE[session_id] = updated_state
-
         return {
             "session_id": session_id,
             "stage": result.get("stage", "questions"),
@@ -57,7 +42,6 @@ def chat(req: ChatRequest):
             "questions": result.get("questions"),
             "final_output": result.get("final_output")
         }
-
     except Exception as e:
         raise HTTPException(
             status_code=500,

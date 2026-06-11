@@ -18,8 +18,6 @@ def analyze(tokens: list, db: dict):
         for kw in keywords:
             kw_clean = kw.lower().strip()
             kw_words = kw_clean.split()
-
-            # stem keyword words
             kw_stems = [ps.stem(w) for w in kw_words]
 
             # count partial matches
