@@ -1,39 +1,82 @@
-
 from nltk.stem import PorterStemmer
+
 ps = PorterStemmer()
 
 def analyze(tokens: list, db: dict):
 
     token_set = set(tokens)
-    results = {}
+
+    temp_results = {}
 
     for problem, data in db.items():
 
         keywords = data.get("keywords", [])
+
         if not keywords:
             continue
 
-        matched = []
+        matched_keywords = []
 
         for kw in keywords:
+
             kw_clean = kw.lower().strip()
+
             kw_words = kw_clean.split()
-            kw_stems = [ps.stem(w) for w in kw_words]
 
-            # count partial matches
-            match_count = sum(1 for w in kw_stems if w in token_set)
+            kw_stems = [
+                ps.stem(w)
+                for w in kw_words
+            ]
 
-            # 🔥 flexible match condition
-            if match_count >= max(1, len(kw_stems) // 2):
-                matched.append(kw_clean)
+            match_count = sum(
+                1
+                for w in kw_stems
+                if w in token_set
+            )
 
-        if matched:
-            score = len(matched)
+            required_matches = max(
+                1,
+                len(kw_stems) // 2
+            )
 
-            results[problem] = {
-                "score": score,
-                "matched_keywords": matched,
-                "total_keywords": len(keywords)
-            }
+            if match_count >= required_matches:
 
-    return results
+                matched_keywords.append(
+                    kw_clean
+                )
+
+        # at least 2 matched keywords
+        if len(matched_keywords) < 2:
+            continue
+
+        total_keywords = len(keywords)
+
+        score = round(
+            (
+                len(matched_keywords)
+                / total_keywords
+            ) * 100,
+            2
+        )
+
+        temp_results[problem] = {
+            "score": score,
+            "matched_keywords":
+                matched_keywords,
+            "total_keywords":
+                total_keywords
+        }
+
+    sorted_results = dict(
+
+        sorted(
+            temp_results.items(),
+
+            key=lambda item:
+                item[1]["score"],
+
+            reverse=True
+        )
+    )
+
+    return sorted_results
