@@ -34,18 +34,20 @@ def analyze(tokens: list, db: dict):
                 if w in token_set
             )
 
-            required_matches = max(
-                1,
-                len(kw_stems) // 2
-            )
+            # stricter matching
+            if len(kw_stems) <= 2:
+                required_matches = len(kw_stems)
+            else:
+                required_matches = max(
+                    2,
+                    int(len(kw_stems) * 0.7)
+                )
 
             if match_count >= required_matches:
-
                 matched_keywords.append(
                     kw_clean
                 )
 
-        # at least 2 matched keywords
         if len(matched_keywords) < 2:
             continue
 
@@ -61,20 +63,14 @@ def analyze(tokens: list, db: dict):
 
         temp_results[problem] = {
             "score": score,
-            "matched_keywords":
-                matched_keywords,
-            "total_keywords":
-                total_keywords
+            "matched_keywords": matched_keywords,
+            "total_keywords": total_keywords
         }
 
     sorted_results = dict(
-
         sorted(
             temp_results.items(),
-
-            key=lambda item:
-                item[1]["score"],
-
+            key=lambda item: item[1]["score"],
             reverse=True
         )
     )

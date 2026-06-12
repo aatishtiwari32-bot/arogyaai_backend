@@ -1,7 +1,7 @@
 from database.skin import skin_db
 from database.blood import blood_db
 from database.mental import mental_db
-from database.harmonal import harmonal_db
+from database.hormonal import hormonal_db
 from database.bones import bones_db
 from database.joints import joints_db
 from database.digestion import digestion_db
@@ -21,7 +21,7 @@ def pipeline(text, state=None):
     
     skin_results = analyze(tokens, skin_db)
     mental_results = analyze(tokens, mental_db)
-    harmonal_results = analyze(tokens, harmonal_db)
+    hormonal_results = analyze(tokens, hormonal_db)
     blood_results = analyze(tokens, blood_db)
     bones_results = analyze(tokens, bones_db)
     joints_results = analyze(tokens, joints_db)
@@ -30,7 +30,7 @@ def pipeline(text, state=None):
     
     skin_matches = sum(len(v["matched_keywords"]) for v in skin_results.values())
     mental_matches = sum(len(v["matched_keywords"]) for v in mental_results.values())
-    harmonal_matches = sum(len(v["matched_keywords"]) for v in harmonal_results.values())
+    hormonal_matches = sum(len(v["matched_keywords"]) for v in hormonal_results.values())
     blood_matches = sum(len(v["matched_keywords"]) for v in blood_results.values()) 
     bones_matches = sum(len(v["matched_keywords"]) for v in bones_results.values())
     joints_matches = sum(len(v["matched_keywords"]) for v in joints_results.values()) 
@@ -39,7 +39,7 @@ def pipeline(text, state=None):
     
     ask_count = state.get("ask_count", 0)
 
-    if (skin_matches <= 1 and mental_matches <= 1 and harmonal_matches <=1 and blood_matches <=1 and  bones_matches <=1 and joints_matches <=1 and digestion_matches <= 1 and lungs_matches <=1):
+    if (skin_matches <= 1 and mental_matches <= 1 and hormonal_matches <=1 and blood_matches <=1 and  bones_matches <=1 and joints_matches <=1 and digestion_matches <= 1 and lungs_matches <=1):
 
         if ask_count < 2:
             state["ask_count"] = ask_count + 1
@@ -64,7 +64,7 @@ def pipeline(text, state=None):
                 "final_output": None
             }, state
 
-    top_list = prioritize(skin_results, mental_results, harmonal_results, blood_results, bones_results, joints_results, digestion_results, lungs_results )
+    top_list = prioritize(skin_results, mental_results, hormonal_results, blood_results, bones_results, joints_results, digestion_results, lungs_results )
 
     if not top_list:
         return {
@@ -92,10 +92,18 @@ def pipeline(text, state=None):
             db = skin_db
         elif category == "mental":
             db = mental_db
-        elif category == "harmonal":
-            db = harmonal_db
+        elif category == "hormonal":
+            db = hormonal_db
         elif category == "blood":
-            db = blood_db            
+            db = blood_db
+        elif category == "bones":
+            db = bones_db
+        elif category == "joints":
+            db = joints_db
+        elif category == "digestion":
+            db = digestion_db
+        elif category == "lungs":
+            db = lungs_db            
         problem_data = db.get(problem, {})
 
         final_output[f"problem_{idx}"] = {

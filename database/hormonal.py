@@ -1,4 +1,4 @@
-harmonal_db = {
+hormonal_db = {
     "hypothyroidism": {
     "keywords": [
         "hypothyroidism",
