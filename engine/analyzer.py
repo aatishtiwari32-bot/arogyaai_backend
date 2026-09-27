@@ -1,5 +1,4 @@
 import re
-from difflib import SequenceMatcher
 
 from nltk.stem import PorterStemmer
 
@@ -72,9 +71,10 @@ STOP_WORDS = {
 # MATCHING CONFIGURATION
 # ============================================================
 
-# Minimum percentage of keyword tokens that must match.
+# Minimum percentage of tokens from a database keyword
+# that must match the user's input.
 #
-# Example:
+# Examples:
 #
 # 2-token keyword:
 #     2 / 2 = 100%
@@ -88,14 +88,20 @@ STOP_WORDS = {
 COVERAGE_THRESHOLD = 0.75
 
 
-# Minimum fuzzy similarity for a token-level typo match.
-FUZZY_THRESHOLD = 0.75
+# ============================================================
+# FUZZY MATCHING CONFIGURATION
+# ============================================================
 
-
-# For very short words fuzzy matching can create false matches.
-# Therefore fuzzy matching is disabled for words shorter than 4
-# characters.
-MIN_FUZZY_LENGTH = 4
+# Maximum edit distance allowed.
+#
+# Short words:
+#     maximum 1 edit
+#
+# Longer words:
+#     maximum 2 edits
+#
+MAX_SHORT_WORD_DISTANCE = 1
+MAX_LONG_WORD_DISTANCE = 2
 
 
 # ============================================================
@@ -106,12 +112,14 @@ def normalize_keyword(
     keyword: str
 ):
     """
-    Normalize one database keyword/phrase.
+    Normalize a database keyword/phrase.
 
     Example:
 
         "Painful pimples"
-            ->
+
+    becomes approximately:
+
         ("pain", "pimpl")
     """
 
@@ -152,7 +160,85 @@ def normalize_keyword(
 
 
 # ============================================================
-# TOKEN SIMILARITY
+# EDIT DISTANCE
+# ============================================================
+
+def edit_distance(
+    word1: str,
+    word2: str
+):
+    """
+    Calculate Levenshtein edit distance.
+
+    Operations:
+
+        insertion
+        deletion
+        substitution
+    """
+
+    if word1 == word2:
+        return 0
+
+    if not word1:
+        return len(word2)
+
+    if not word2:
+        return len(word1)
+
+    previous_row = list(
+        range(
+            len(word2) + 1
+        )
+    )
+
+    for i, char1 in enumerate(
+        word1,
+        start=1
+    ):
+
+        current_row = [
+            i
+        ]
+
+        for j, char2 in enumerate(
+            word2,
+            start=1
+        ):
+
+            insertion = (
+                current_row[j - 1]
+                + 1
+            )
+
+            deletion = (
+                previous_row[j]
+                + 1
+            )
+
+            substitution = (
+                previous_row[j - 1]
+                +
+                (
+                    char1 != char2
+                )
+            )
+
+            current_row.append(
+                min(
+                    insertion,
+                    deletion,
+                    substitution
+                )
+            )
+
+        previous_row = current_row
+
+    return previous_row[-1]
+
+
+# ============================================================
+# TOKEN MATCHING
 # ============================================================
 
 def token_matches(
@@ -160,98 +246,113 @@ def token_matches(
     user_token
 ):
     """
-    Determine whether one keyword token matches one user token.
+    Safely compare one normalized keyword token
+    with one normalized user token.
 
-    Matching levels:
+    Matching rules:
 
-        1. Exact normalized match
-        2. Safe prefix match
-        3. Fuzzy similarity match
+        1. Exact match
+        2. Controlled fuzzy match
+
+    Fuzzy matching is intentionally conservative.
 
     Examples:
 
-        itch  -> itch      ✅
-        itch  -> itchingg  → handled conservatively
-        foot  -> foot      ✅
+        foot  <-> fooot      ✅
+        itch  <-> itcch      ✅
+
+        hair  <-> itch       ❌
+        pain  <-> foot       ❌
     """
 
-    if not keyword_token or not user_token:
+    if not keyword_token:
         return False
 
-    # --------------------------------------------------------
-    # Exact match
-    # --------------------------------------------------------
+    if not user_token:
+        return False
+
+    # ========================================================
+    # EXACT MATCH
+    # ========================================================
 
     if keyword_token == user_token:
         return True
 
-    # --------------------------------------------------------
-    # Fuzzy matching should NOT be used for tiny words.
-    #
-    # Otherwise:
-    #
-    #     "flu"
-    #     "fly"
-    #
-    # could become a false match.
-    # --------------------------------------------------------
+    # ========================================================
+    # LENGTH CHECK
+    # ========================================================
 
-    if (
-        len(keyword_token) < MIN_FUZZY_LENGTH
-        or len(user_token) < MIN_FUZZY_LENGTH
-    ):
+    keyword_length = len(
+        keyword_token
+    )
+
+    user_length = len(
+        user_token
+    )
+
+    length_difference = abs(
+        keyword_length
+        -
+        user_length
+    )
+
+    # Too different in size.
+    if length_difference > 2:
         return False
 
-    # --------------------------------------------------------
-    # Safe prefix check
+    # ========================================================
+    # FIRST CHARACTER GUARD
+    # ========================================================
     #
-    # Useful for cases where stemming does not completely
-    # remove a spelling variation.
+    # This is important for avoiding nonsense fuzzy matches.
     #
     # Example:
     #
-    #     itch
-    #     itchign
+    # hair
+    # itch
     #
-    # --------------------------------------------------------
-
-    shorter = min(
-        keyword_token,
-        user_token,
-        key=len
-    )
-
-    longer = max(
-        keyword_token,
-        user_token,
-        key=len
-    )
-
-    length_difference = (
-        len(longer)
-        -
-        len(shorter)
-    )
+    # same length but completely different words.
+    #
+    # We don't want those to match.
+    # ========================================================
 
     if (
-        len(shorter) >= 4
-        and length_difference <= 3
-        and longer.startswith(shorter)
+        keyword_token[0]
+        !=
+        user_token[0]
     ):
-        return True
+        return False
 
-    # --------------------------------------------------------
-    # Sequence similarity
-    # --------------------------------------------------------
+    # ========================================================
+    # EDIT DISTANCE
+    # ========================================================
 
-    similarity = SequenceMatcher(
-        None,
+    distance = edit_distance(
         keyword_token,
         user_token
-    ).ratio()
+    )
+
+    # ========================================================
+    # SHORT WORDS
+    # ========================================================
+
+    if (
+        keyword_length <= 5
+        and user_length <= 5
+    ):
+
+        return (
+            distance
+            <= MAX_SHORT_WORD_DISTANCE
+        )
+
+    # ========================================================
+    # LONG WORDS
+    # ========================================================
 
     return (
-        similarity >= FUZZY_THRESHOLD
+        distance
+        <= MAX_LONG_WORD_DISTANCE
     )
 
 
@@ -264,24 +365,25 @@ def match_keyword_tokens(
     user_tokens
 ):
     """
-    Match keyword tokens against user tokens.
+    Match a keyword's tokens against user tokens.
 
-    IMPORTANT:
-
-        Order does NOT matter.
+    Word order DOES NOT matter.
 
     Example:
 
-        keyword:
+        Database keyword:
+
             ("itch", "foot")
 
-        user:
+        User:
+
             ["foot", "itch"]
 
-        result:
+        Result:
+
             2 / 2 = 100%
 
-    Each user token can only be used once.
+    Every user token can be used only once.
     """
 
     if not keyword_tokens:
@@ -294,9 +396,9 @@ def match_keyword_tokens(
 
     matched_count = 0
 
-    # --------------------------------------------------------
-    # Match every keyword token against an unused user token.
-    # --------------------------------------------------------
+    # ========================================================
+    # MATCH EVERY KEYWORD TOKEN
+    # ========================================================
 
     for keyword_token in keyword_tokens:
 
@@ -306,6 +408,7 @@ def match_keyword_tokens(
             user_tokens
         ):
 
+            # User token already used for another keyword token.
             if index in used_user_indices:
                 continue
 
@@ -324,7 +427,7 @@ def match_keyword_tokens(
 
                 break
 
-        if not found_match:
+        if found_match:
             continue
 
     return matched_count
@@ -339,8 +442,15 @@ def keyword_coverage(
     user_tokens
 ):
     """
-    Calculate what percentage of a keyword's tokens
-    matched the user's input.
+    Calculate the percentage of a database keyword
+    that was matched in the user message.
+
+    Returns:
+
+        0.0 -> no match
+        0.5 -> half matched
+        0.75 -> 75% matched
+        1.0 -> complete match
     """
 
     if not keyword_tokens:
@@ -367,8 +477,13 @@ def calculate_legacy_score(
     total_keywords
 ):
     """
-    Legacy percentage score for categories whose weighted
-    engine is not implemented yet.
+    Calculate the original percentage score for categories
+    that do not yet use the weighted engine.
+
+    Example:
+
+        2 matched out of 10
+        -> 20.0
     """
 
     if total_keywords <= 0:
@@ -379,7 +494,8 @@ def calculate_legacy_score(
             matched_count
             /
             total_keywords
-        ) * 100,
+        )
+        * 100,
         2
     )
 
@@ -395,22 +511,24 @@ def analyze(
     category: str | None = None
 ):
     """
-    Analyze one medical database against the user's tokens.
+    Analyze a medical database against user tokens.
 
     Responsibilities:
 
-        1. Match database keywords.
-        2. Support spelling variations.
+        1. Normalize database keywords.
+        2. Match keywords against user tokens.
         3. Ignore keyword word order.
-        4. Calculate weighted evidence when available.
+        4. Handle small spelling mistakes.
+        5. Apply 75% token coverage.
+        6. Calculate weighted evidence when available.
 
-    Ranking is NOT performed here.
+    This function DOES NOT sort results.
 
-    Ranking belongs to prioritizer.py.
+    Sorting is handled by prioritizer.py.
     """
 
     # ========================================================
-    # VALIDATE INPUT
+    # INPUT VALIDATION
     # ========================================================
 
     if not isinstance(
@@ -426,7 +544,7 @@ def analyze(
         return {}
 
     # ========================================================
-    # CLEAN USER TOKENS
+    # NORMALIZE USER TOKENS
     # ========================================================
 
     user_tokens = []
@@ -485,56 +603,91 @@ def analyze(
         seen_keyword_signatures = set()
 
         # ====================================================
-        # PROCESS EVERY KEYWORD
+        # PROCESS EVERY DATABASE KEYWORD
         # ====================================================
+
         for keyword in keywords:
+
             if not isinstance(
                 keyword,
                 str
             ):
                 continue
+
             keyword = keyword.strip()
+
             if not keyword:
                 continue
+
+            # ------------------------------------------------
+            # Normalize keyword.
+            # ------------------------------------------------
+
             keyword_tokens = normalize_keyword(
                 keyword
             )
+
             if not keyword_tokens:
                 continue
-            # Avoid duplicate normalized keywords.
+
+            # ------------------------------------------------
+            # Remove duplicate normalized keywords.
             #
             # Example:
             #
-            # pimple
-            # pimples
+            # "pimple"
+            # "pimples"
             #
-            # may normalize to the same representation.
+            # If both normalize to the same representation,
+            # they count as ONE keyword concept.
+            # ------------------------------------------------
+
             if keyword_tokens in seen_keyword_signatures:
                 continue
+
             seen_keyword_signatures.add(
                 keyword_tokens
             )
-            # Calculate token coverage.
+
+            # ------------------------------------------------
+            # Calculate coverage.
+            # ------------------------------------------------
+
             coverage = keyword_coverage(
                 keyword_tokens,
                 user_tokens
             )
-            # MATCH DECISION
+
+            # ------------------------------------------------
+            # Current prototype:
             #
-            # Default = 75%
+            # 75% keyword-token coverage required.
             #
-            # partial_match exists for compatibility with the
-            # old engine. We do not lower the threshold because
-            # the current prototype is explicitly using 75%.
-            if coverage >= COVERAGE_THRESHOLD:
+            # partial_match is kept in the function signature
+            # for compatibility with the previous engine.
+            # ------------------------------------------------
+
+            threshold = COVERAGE_THRESHOLD
+
+            if coverage >= threshold:
+
                 matched_keywords.append(
                     keyword.lower()
                 )
-        # NO KEYWORD MATCH
+
+        # ====================================================
+        # NOTHING MATCHED
+        # ====================================================
+
         if not matched_keywords:
             continue
+
+        # ====================================================
         # WEIGHTED CATEGORY
+        # ====================================================
+
         if category in WEIGHT_DB:
+
             total_weight = (
                 calculate_total_weight(
                     category,
@@ -542,60 +695,94 @@ def analyze(
                     matched_keywords
                 )
             )
+
+            # ------------------------------------------------
             # Weak weighted evidence is discarded.
+            # ------------------------------------------------
+
             if total_weight < MIN_WEIGHT:
                 continue
+
             results[problem] = {
+
                 # Main ranking value.
                 "score": round(
                     total_weight,
                     4
                 ),
+
+                # Explicit weighted score.
                 "weighted_score": round(
                     total_weight,
                     4
                 ),
+
+                # Same value kept explicitly for debugging.
                 "total_weight": round(
                     total_weight,
                     4
                 ),
+
+                # Actual evidence that triggered this result.
                 "matched_keywords":
                     matched_keywords,
+
+                # Useful debugging information.
                 "matched_keyword_count":
-                    len(matched_keywords),
+                    len(
+                        matched_keywords
+                    ),
+
                 "total_keywords":
                     len(
                         seen_keyword_signatures
                     )
             }
+
         # ====================================================
         # NON-WEIGHTED CATEGORY
         # ====================================================
+        #
+        # Other categories can continue using the existing
+        # scoring model until their own weight engines exist.
+        # ====================================================
+
         else:
-            # Keep existing behaviour for categories which
-            # don't yet have their own weight engine.
+
             if len(matched_keywords) < 2:
                 continue
+
             raw_score = calculate_legacy_score(
                 len(matched_keywords),
                 len(seen_keyword_signatures)
             )
+
             results[problem] = {
-                "score": raw_score,
-                "weighted_score": None,
-                "total_weight": None,
+
+                "score":
+                    raw_score,
+
+                "weighted_score":
+                    None,
+
+                "total_weight":
+                    None,
+
                 "matched_keywords":
                     matched_keywords,
+
                 "matched_keyword_count":
-                    len(matched_keywords),
+                    len(
+                        matched_keywords
+                    ),
                 "total_keywords":
                     len(
                         seen_keyword_signatures
                     )
             }
-    # IMPORTANT
+    # IMPORTANT:
     #
     # DO NOT SORT HERE.
     #
-    # prioritizer.py is responsible for ranking.
+    # prioritizer.py owns ranking.
     return results
