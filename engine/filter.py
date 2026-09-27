@@ -3,7 +3,7 @@ from nltk.stem import PorterStemmer
 ps = PorterStemmer()
 stop_words = set([
     "i", "have", "is", "am", "are", "the", "a", "an", "and", "or",
-    "to", "of", "in", "on", "for", "with", "my", "me", "he", "she", "there", "because", "that", "having", "while", "around", "experiencing"
+    "to", "of", "in", "on", "for", "with", "my", "me", "he", "she", "there", "because", "that", "having", "while", "around", "experiencing", "while", "during"
 ])
 
 def preprocess(text: str):
