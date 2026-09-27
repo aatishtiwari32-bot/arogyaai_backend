@@ -470,10 +470,10 @@ skin_db = {
 
 
 "athlete_foot": {
-    "keywords": ["itching foot", "fungus foot", ""
+    "keywords": ["itching foot", "fungus foot",
         "itching between toes", "cracked skin between toes",
         "foot fungal infection", "white peeling between toes",
-        "burning feet itching", "foot skin peeling itching"
+        "burning feet itching", "foot skin peeling itching", "itching around foot"
     ],
     "reasons": [
         "fungal infection",
